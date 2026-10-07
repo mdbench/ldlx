@@ -5,12 +5,12 @@
 [![Build LDLx Kiosk ISO](https://github.com/mdbench/ldlx/actions/workflows/build_kiosk.yml/badge.svg)](https://github.com/mdbench/ldlx/actions/workflows/build_kiosk.yml)
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/mdbench/ldlx?color=blue&style=flat-square)](https://github.com/mdbench/ldlx/releases)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg?style=flat-square)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Debian%20Bookworm%20%7C%20Flutter%20--pi-orange?style=flat-square)](https://github.com/mdbench/ldlx)
+[![Platform](https://img.shields.io/badge/Platform-Debian%20Bookworm%20%7C%20Flutter-orange?style=flat-square)](https://github.com/mdbench/ldlx)
 
 </div>
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/mdbench/ldlx/refs/heads/main/demo1.jpg" alt="LDLx Demo Image of Initial Entry" width="100%" height="auto" />
+  <img src="https://raw.githubusercontent.com/mdbench/ldlx/refs/heads/main/demo1.png" alt="LDLx Demo Image of Initial Entry" width="100%" height="auto" />
 </div>
 
 Lady of the Data Lake (LDLx) is a dedicated operating system designed to host and manage databases natively. 
@@ -23,7 +23,7 @@ LDLx solves this problem by functioning as a security-focused, dedicated databas
 
 ## Key Features
 
-* **Dedicated Database OS:** Runs directly on hardware as a lean operating system powered by flutter-pi, removing unnecessary desktop overhead and focusing all system resources on database performance.
+* **Dedicated Database OS:** Runs directly on hardware as a lean operating system powered by flutter, removing unnecessary desktop overhead and focusing all system resources on database performance.
 * **Production-Grade Tunneling:** Designed to ship with native, built-in Cloudflare Tunnel support alongside other networking options. This allows users to take a local database and securely expose it for production use without managing static public IP addresses or complex firewall configurations.
 * **Local-First Architecture:** Empowers users to maintain absolute physical and local control over their data while retaining the flexibility to scale to production networks instantly.
 * **Lightweight and Fast:** Optimized for minimal resource consumption, making it ideal for edge computing, local servers, or dedicated hardware nodes.
@@ -197,7 +197,7 @@ The LDLx API (`DbServerManager`) exposes a secure HTTPS REST server running on p
 
 ## Roadmap
 
-* Enforce better memory management, code reusability, and enhance core features.
+* Enforce better memory management, code reusability, enhance core features, and finish flutter-pi OS.
 * Add pro version subscription upgrade to free version for more advanced features.
 
 ## License

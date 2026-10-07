@@ -1,0 +1,70 @@
+name: LDLx
+description: "A database OS."
+publish_to: 'none' 
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # UI & State Management
+  provider: ^6.1.1
+  
+  # Local Server API
+  shelf: ^1.4.1
+  shelf_router: ^1.1.4
+  
+  # Authentication & Security
+  dart_jsonwebtoken: ^2.12.1
+  
+  # Dashboard Telemetry
+  device_info_plus: ^10.0.0
+  network_info_plus: ^5.0.0
+
+  # ==========================================
+  # INDUSTRY DATABASES (SQL & NoSQL)
+  # ==========================================
+  
+  # Local SQL (Desktop Support)
+  sqflite_common_ffi: ^2.3.0
+  
+  # Industry SQL Servers
+  postgres: ^3.1.1
+  mysql_client: ^0.0.27
+  
+  # Industry NoSQL Servers
+  mongo_dart: ^0.10.0
+  redis: ^3.0.0
+  
+  # Local NoSQL Data Stores
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  isar: ^3.1.0
+  isar_flutter_libs: ^3.1.0
+
+  # In house data storage
+  sembast: ^3.7.0
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Code Generators required for Hive and Isar NoSQL models
+  build_runner: ^2.4.6
+  hive_generator: ^2.0.1
+  isar_generator: ^3.1.0
+
+flutter:
+  uses-material-design: true
+
+  # Register the LDLx logo
+  assets:
+    - assets/ldlx.jpg
+    - assets/cert.pem
+    - assets/key.pem

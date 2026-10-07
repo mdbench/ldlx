@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation & API Walkthrough | LDLx Security Kiosk OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ice: {
+                            50: '#F0F9FF',
+                            100: '#E0F2FE',
+                            200: '#BAE6FD',
+                            300: '#7DD3FC',
+                            400: '#38BDF8',
+                            500: '#0EA5E9',
+                            800: '#075985',
+                            900: '#0C4A6E',
+                            950: '#082F49',
+                        },
+                        glacial: {
+                            dark: '#030712',
+                            card: 'rgba(14, 165, 233, 0.03)',
+                            border: 'rgba(125, 211, 252, 0.15)',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-panel {
+            background: rgba(8, 47, 73, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(125, 211, 252, 0.12);
+        }
+        .glass-card {
+            background: linear-gradient(135deg, rgba(224, 242, 254, 0.05) 0%, rgba(8, 47, 73, 0.2) 100%);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(125, 211, 252, 0.15);
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, #FFFFFF 0%, #E0F2FE 50%, #7DD3FC 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-glacial-dark text-ice-100 font-sans antialiased selection:bg-ice-500 selection:text-glacial-dark overflow-x-hidden">
+
+    <!-- Ambient Background Gradients -->
+    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div class="absolute -top-[40%] -left-[20%] w-[80vw] h-[80vw] rounded-full bg-ice-500/10 blur-[120px]"></div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="fixed top-0 left-0 right-0 z-50 glass-panel border-b border-ice-900/50">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <img src="ldlx.jpg" alt="LDLx Logo" class="w-10 h-10 rounded-xl object-cover border border-ice-300/30 shadow-lg">
+                <a href="index.html" class="font-bold text-xl tracking-wider text-gradient">LDLx OS</a>
+            </div>
+            <nav class="hidden md:flex items-center space-x-6 text-sm font-medium text-ice-200">
+                <a href="index.html" class="hover:text-ice-400 transition-colors">Home</a>
+                <a href="#installation" class="hover:text-ice-400 transition-colors">OS Installation</a>
+                <a href="#api" class="hover:text-ice-400 transition-colors">API Reference</a>
+                <a href="security.html" class="hover:text-ice-400 transition-colors">Security</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="relative pt-36 pb-28 px-6 z-10">
+        <div class="max-w-4xl mx-auto space-y-16">
+            
+            <!-- Page Title -->
+            <div class="space-y-4">
+                <span class="text-xs font-mono text-ice-400 uppercase tracking-widest">System Guide & Walkthrough</span>
+                <h1 class="text-4xl lg:text-6xl font-bold text-gradient">Lady of the Data Lake (LDLx) Documentation</h1>
+                <p class="text-ice-200/80 font-light text-lg">Complete operational manual for deploying the LDLx sovereign database operating system and integrating with its secure HTTPS REST API.</p>
+            </div>
+
+            <!-- SECTION 1: Overview & Need -->
+            <div class="glass-card p-8 lg:p-12 rounded-3xl border border-ice-300/20 space-y-6">
+                <h2 class="text-2xl font-semibold text-ice-100 font-sans">1. The Architectural Need It Fills</h2>
+                <p class="text-ice-200/90 font-light leading-relaxed">
+                    Developers and small teams frequently rely on databases, but transitioning those databases into secure, production-grade environments usually requires complex server setups, cloud hosting contracts, and intricate networking configurations.
+                </p>
+                <p class="text-ice-200/90 font-light leading-relaxed">
+                    LDLx solves this problem by functioning as a security-focused, dedicated database operating system. Instead of running a database as a background application inside a heavy general-purpose desktop or server OS, LDLx turns hardware into a streamlined, purpose-built database server.
+                </p>
+            </div>
+
+            <!-- SECTION 2: OS Installation -->
+            <div id="installation" class="glass-card p-8 lg:p-12 rounded-3xl border border-ice-300/20 space-y-6">
+                <h2 class="text-2xl font-semibold text-ice-100 font-sans">2. Operating System Installation</h2>
+                <p class="text-ice-200/90 font-light leading-relaxed">
+                    LDLx can be installed onto bare-metal hardware or run as a live image using automated ISO builds.
+                </p>
+                <div class="space-y-4 pt-2">
+                    <div class="flex items-start space-x-4">
+                        <div class="w-8 h-8 rounded-xl bg-ice-500/20 border border-ice-400/30 flex items-center justify-center font-mono text-ice-300 flex-shrink-0">1</div>
+                        <div>
+                            <h4 class="font-semibold text-ice-100">Download the ISO</h4>
+                            <p class="text-ice-200/70 text-sm font-light mt-1">Visit the <a href="https://github.com/mdbench/ldlx/releases" target="_blank" class="text-ice-400 underline">LDLx GitHub Releases Page</a> and download the latest installable release asset.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-4">
+                        <div class="w-8 h-8 rounded-xl bg-ice-500/20 border border-ice-400/30 flex items-center justify-center font-mono text-ice-300 flex-shrink-0">2</div>
+                        <div>
+                            <h4 class="font-semibold text-ice-100">Flash to USB</h4>
+                            <p class="text-ice-200/70 text-sm font-light mt-1">Flash the ISO image to a blank USB flash drive using Rufus, Ventoy, or dd.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-4">
+                        <div class="w-8 h-8 rounded-xl bg-ice-500/20 border border-ice-400/30 flex items-center justify-center font-mono text-ice-300 flex-shrink-0">3</div>
+                        <div>
+                            <h4 class="font-semibold text-ice-100">Boot Target Hardware</h4>
+                            <p class="text-ice-200/70 text-sm font-light mt-1">Insert the USB into your target machine, boot into UEFI/BIOS settings, configure priority boot from USB, and launch the installer.</p>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-4">
+                        <div class="w-8 h-8 rounded-xl bg-ice-500/20 border border-ice-400/30 flex items-center justify-center font-mono text-ice-300 flex-shrink-0">4</div>
+                        <div>
+                            <h4 class="font-semibold text-ice-100">Kiosk Auto-Login & Execution</h4>
+                            <p class="text-ice-200/70 text-sm font-light mt-1">Upon completion and reboot, the system automatically launches into the secure LDLx environment on tty1 via systemd.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 3: API Documentation -->
+            <div id="api" class="glass-card p-8 lg:p-12 rounded-3xl border border-ice-300/20 space-y-8">
+                <h2 class="text-2xl font-semibold text-ice-100 font-sans">3. LDLx API Reference (`DbServerManager`)</h2>
+                <p class="text-ice-200/90 font-light leading-relaxed">
+                    The LDLx API exposes a secure HTTPS REST server running on port <code class="text-ice-300 font-mono">9000</code> to manage local databases, rotate authentication tokens, and execute CRUD operations.
+                </p>
+
+                <!-- Base URL & Protocol -->
+                <div class="space-y-3 p-5 rounded-2xl bg-glacial-dark/50 border border-ice-400/20">
+                    <h3 class="font-semibold text-ice-100 text-sm uppercase tracking-wider font-mono">Base URL & Protocols</h3>
+                    <ul class="text-sm space-y-2 text-ice-200/80 font-mono">
+                        <li>Domain / Local URL: <span class="text-ice-300">https://lakelady.ldlx:9000</span> or <span class="text-ice-300">https://&lt;bound_ip&gt;:9000</span></li>
+                        <li>Transport: HTTPS / Secure JSON over SSL using local certificates</li>
+                        <li>Required Headers: 
+                            <div class="pl-4 mt-1 text-ice-300/80">
+                                Authorization: Bearer &lt;jwt_token&gt;<br>
+                                X-Database-Name: &lt;database_name&gt;
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Endpoints List -->
+                <div class="space-y-6">
+                    
+                    <!-- 1. Health Check -->
+                    <div class="space-y-3 border-t border-ice-900/60 pt-6">
+                        <div class="flex items-center space-x-3">
+                            <span class="px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold">GET</span>
+                            <span class="font-mono text-ice-100 text-sm">/health</span>
+                        </div>
+                        <p class="text-sm text-ice-200/70 font-light">Retrieves server status, protocol, bound IP, domain, port, target database state, available databases, and current authentication validity.</p>
+                        <pre class="p-4 rounded-xl bg-glacial-dark text-ice-300 font-mono text-xs overflow-x-auto border border-ice-400/20"><code>{
+  "status": "UP",
+  "protocol": "HTTPS",
+  "server": "LDLx Unified Data Lake REST Server",
+  "bound_ip": "192.168.1.50",
+  "domain": "lakelady.ldlx",
+  "port": 9000,
+  "target_database": "core",
+  "available_databases": ["core", "users", "analytics"],
+  "authenticated": true
+}</code></pre>
+                    </div>
+
+                    <!-- 2. Rotate Token -->
+                    <div class="space-y-3 border-t border-ice-900/60 pt-6">
+                        <div class="flex items-center space-x-3">
+                            <span class="px-2.5 py-1 rounded bg-ice-500/20 text-ice-300 font-mono text-xs font-bold">POST</span>
+                            <span class="font-mono text-ice-100 text-sm">/api/auth/token</span>
+                        </div>
+                        <p class="text-sm text-ice-200/70 font-light">Generates a fresh cryptographic HS256 JWT token with full admin scope and invalidates all prior tokens.</p>
+                        <pre class="p-4 rounded-xl bg-glacial-dark text-ice-300 font-mono text-xs overflow-x-auto border border-ice-400/20"><code>{
+  "status": "TOKEN_ROTATED",
+  "message": "All previous tokens have been expired successfully.",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}</code></pre>
+                    </div>
+
+                    <!-- 3. Data CRUD -->
+                    <div class="space-y-3 border-t border-ice-900/60 pt-6">
+                        <div class="flex items-center space-x-3">
+                            <span class="px-2.5 py-1 rounded bg-cyan-500/20 text-cyan-300 font-mono text-xs font-bold">CRUD</span>
+                            <span class="font-mono text-ice-100 text-sm">/api/data (GET, POST, PUT, DELETE)</span>
+                        </div>
+                        <p class="text-sm text-ice-200/70 font-light">Manages document records within the targeted database header context. Supports querying by field, inserting JSON payloads, updating records with automatic metadata tracking, and removing records.</p>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-ice-900/60 py-12 px-6 relative z-10 bg-glacial-dark">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between text-xs text-ice-400/50 font-mono">
+            <div>&copy; 2026 LDLx Database OS. All rights reserved.</div>
+            <div class="mt-4 md:mt-0 flex space-x-6">
+                <a href="privacy.html" class="hover:text-ice-300 transition-colors">Privacy Policy</a>
+                <a href="terms.html" class="hover:text-ice-300 transition-colors">Terms of Service</a>
+                <a href="security.html" class="hover:text-ice-300 transition-colors">Security & Compliance</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

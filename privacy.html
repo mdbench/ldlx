@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy | LDLx Security Kiosk OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ice: {
+                            50: '#F0F9FF',
+                            100: '#E0F2FE',
+                            200: '#BAE6FD',
+                            300: '#7DD3FC',
+                            400: '#38BDF8',
+                            500: '#0EA5E9',
+                            800: '#075985',
+                            900: '#0C4A6E',
+                            950: '#082F49',
+                        },
+                        glacial: {
+                            dark: '#030712',
+                            card: 'rgba(14, 165, 233, 0.03)',
+                            border: 'rgba(125, 211, 252, 0.15)',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-panel {
+            background: rgba(8, 47, 73, 0.4);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(125, 211, 252, 0.12);
+        }
+        .glass-card {
+            background: linear-gradient(135deg, rgba(224, 242, 254, 0.05) 0%, rgba(8, 47, 73, 0.2) 100%);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(125, 211, 252, 0.15);
+        }
+        .text-gradient {
+            background: linear-gradient(135deg, #FFFFFF 0%, #E0F2FE 50%, #7DD3FC 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+    </style>
+</head>
+<body class="bg-glacial-dark text-ice-100 font-sans antialiased selection:bg-ice-500 selection:text-glacial-dark overflow-x-hidden">
+
+    <!-- Ambient Background Gradients -->
+    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div class="absolute -top-[40%] -left-[20%] w-[80vw] h-[80vw] rounded-full bg-ice-500/10 blur-[120px]"></div>
+    </div>
+
+    <!-- Header Navigation -->
+    <header class="fixed top-0 left-0 right-0 z-50 glass-panel border-b border-ice-900/50">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <img src="ldlx.jpg" alt="LDLx Logo" class="w-10 h-10 rounded-xl object-cover border border-ice-300/30 shadow-lg">
+                <a href="index.html" class="font-bold text-xl tracking-wider text-gradient">LDLx OS</a>
+            </div>
+            <nav class="flex items-center space-x-6 text-sm font-medium text-ice-200">
+                <a href="index.html" class="hover:text-ice-400 transition-colors">Home</a>
+                <a href="terms.html" class="hover:text-ice-400 transition-colors">Terms of Service</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="relative pt-36 pb-28 px-6 z-10">
+        <div class="max-w-4xl mx-auto space-y-12">
+            <div class="space-y-4">
+                <span class="text-xs font-mono text-ice-400 uppercase tracking-widest">Legal Compliance</span>
+                <h1 class="text-4xl lg:text-6xl font-bold text-gradient">Privacy Policy</h1>
+                <p class="text-xs font-mono text-ice-300/60">Last updated: October 2026</p>
+            </div>
+
+            <div class="glass-card p-8 lg:p-12 rounded-3xl border border-ice-300/20 space-y-8 text-ice-200/90 font-light leading-relaxed">
+                <section class="space-y-3">
+                    <h2 class="text-2xl font-semibold text-ice-100 font-sans">1. Our Zero-Data Collection Commitment</h2>
+                    <p>LDLx Security Kiosk OS is engineered from the ground up for absolute data sovereignty. I do not track, store, or process any personal telemetry, diagnostic logs, or user usage data on my servers. Your local database operations remain strictly offline and isolated within your controlled environment.</p>
+                </section>
+
+                <section class="space-y-3">
+                    <h2 class="text-2xl font-semibold text-ice-100 font-sans">2. Payment Processing via Stripe</h2>
+                    <p>The only circumstance under which data interaction occurs is when you purchase Pro subscriptions or commercial licenses for my services. All financial transactions, billing records, and payment credentials are processed securely through my designated purchasing partner, <strong>Stripe, Inc.</strong></p>
+                    <p>I never store credit card numbers, banking details, or full billing profiles on LDLx systems. Please review Stripe's Privacy Policy to understand how they handle your payment data.</p>
+                </section>
+
+                <section class="space-y-3">
+                    <h2 class="text-2xl font-semibold text-ice-100 font-sans">3. Open Source Transparency</h2>
+                    <p>Because core architectural components of LDLx are released under open-source parameters, you have complete visibility into how the operating system executes. No hidden background trackers or telemetry agents exist within my source distributions.</p>
+                </section>
+
+                <section class="space-y-3">
+                    <h2 class="text-2xl font-semibold text-ice-100 font-sans">4. Contact & Inquiries</h2>
+                    <p>If you have any questions regarding this Privacy Policy or data handling during Stripe subscription checkout, please reach out via my GitHub repository.</p>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-ice-900/60 py-12 px-6 relative z-10 bg-glacial-dark">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between text-xs text-ice-400/50 font-mono">
+            <div>&copy; 2026 LDLx Database OS. All rights reserved.</div>
+            <div class="mt-4 md:mt-0 flex space-x-6">
+                <a href="privacy.html" class="hover:text-ice-300 transition-colors">Privacy Policy</a>
+                <a href="terms.html" class="hover:text-ice-300 transition-colors">Terms of Service</a>
+                <a href="security.html" class="hover:text-ice-300 transition-colors">Security & Compliance</a>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>

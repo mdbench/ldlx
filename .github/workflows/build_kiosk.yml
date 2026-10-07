@@ -1,0 +1,36 @@
+name: Build LDLx Kiosk ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:bookworm
+      options: --privileged
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install System Prerequisites & Flutter
+        run: |
+          apt-get update && apt-get install -y curl git unzip xz-utils jq
+          git clone https://github.com/flutter/flutter.git -b stable /opt/flutter
+          echo "/opt/flutter/bin" >> $GITHUB_PATH
+
+      - name: Execute Complete Kiosk Build Pipeline
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -x
+          chmod +x ./build_kiosk.sh
+          ./build_kiosk.sh

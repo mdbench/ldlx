@@ -235,7 +235,9 @@ class DbServerManager {
             filename.endsWith('.tmp') ||
             filename.endsWith('.pem') ||
             filename.endsWith('.jwt') ||
-            filename.endsWith('.log')) {
+            filename.endsWith('.log') ||
+            filename.endsWith('.txt') ||
+            filename.endsWith('.env')) {
           continue;
         }
 

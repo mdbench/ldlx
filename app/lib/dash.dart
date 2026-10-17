@@ -226,6 +226,44 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
     super.dispose();
   }
 
+  void _confirmSystemAction(String actionName, String command) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            const SizedBox(width: 8),
+            Text('Confirm System $actionName'),
+          ],
+        ),
+        content: Text('Are you sure you want to $actionName the system? This action will immediately interrupt all services.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await Process.run('sh', ['-c', command]);
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to execute $actionName: $e')),
+                  );
+                }
+              }
+            },
+            child: Text(actionName),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirmAndRegenerateToken(StateSetter setModalState, LocalDatabaseServerInfo server, TextEditingController tokenController) {
     showDialog(
       context: context,
@@ -551,7 +589,7 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [
-          if (_isAdmin)
+          if (_isAdmin) ...[
             Padding(
               padding: const EdgeInsets.only(right: 16.0),
               child: ElevatedButton.icon(
@@ -586,6 +624,27 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                 },
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade800,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.restart_alt, size: 18),
+                label: const Text('Reboot'),
+                onPressed: () => _confirmSystemAction('Reboot', 'reboot'),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: IconButton(
+                icon: const Icon(Icons.power_settings_new, color: Colors.redAccent),
+                tooltip: 'Power Off',
+                onPressed: () => _confirmSystemAction('Power Off', 'poweroff'),
+              ),
+            ),
+          ],
         ],
       ),
       body: _isAdmin ? _buildAdminDashboard(context) : _buildUserAnalystDashboard(context),
@@ -759,7 +818,9 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                                   const SizedBox(height: 2),
                                   Text(server.networkUrl, style: const TextStyle(fontSize: 12, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 4),
-                                  Text('Active Sessions: ${server.activeSessions} \vert{} Total Queries:${server.totalQueries}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  Text('Active Sessions: ${server.activeSessions}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  const SizedBox(height: 2),
+                                  Text('Total Queries:${server.totalQueries}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                 ],
                               ),
                             ),

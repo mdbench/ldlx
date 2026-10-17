@@ -21,7 +21,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
   final ScrollController _scrollController = ScrollController();
   bool _isExecuting = false;
 
-  // Active state for interactive network file editing mode
+  // Active state for interactive network/config file editing mode
   bool _isEditingNetworkFile = false;
   String _targetNetworkFilePath = '/etc/network/interfaces';
   List<String> _editableConfigLines = [];
@@ -39,6 +39,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
     'ldlxconfignet',
     'ldlxeditnet',
     'ldlxstrings',
+    'ldlxtoken',
     'save',
     'cancel',
     'help',
@@ -65,7 +66,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
       });
     }
 
-    // If we are actively in the network file editing state, input lines are appended
+    // If we are actively in the config file editing state, input lines are appended
     if (_isEditingNetworkFile) {
       if (rawInput == 'cancel') {
         _cancelEditing();
@@ -75,6 +76,15 @@ class _TerminalWidgetState extends State<TerminalWidget> {
         return;
       } else {
         setState(() {
+          // If editing the token file, automatically comment out any existing active token lines
+          if (_targetNetworkFilePath.endsWith('token.env') && rawInput.startsWith('CLOUDFLARED_TOKEN=')) {
+            for (int i = 0; i < _editableConfigLines.length; i++) {
+              String line = _editableConfigLines[i].trim();
+              if (line.startsWith('CLOUDFLARED_TOKEN=')) {
+                _editableConfigLines[i] = '# ${_editableConfigLines[i]}';
+              }
+            }
+          }
           _outputLogs.add('\$ [Appending line: "$rawInput"]');
           _editableConfigLines.add(rawInput);
           _commandController.clear();
@@ -112,6 +122,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
       setState(() {
         _outputLogs.add('Available Commands:');
         _outputLogs.add('  ldlxstrings              - View line-by-line pushed strings file in sidebar with copy support');
+        _outputLogs.add('  ldlxtoken                - Open or configure Cloudflare tunnel token environment file');
         _outputLogs.add('  ldlxeditnet [path]       - Open interactive network file editor & sidebar');
         _outputLogs.add('  ldlxconfignet            - Interactive tool to view and configure network parameters');
         _outputLogs.add('  sys-test                 - Inspect system memory (free) and disk storage (df)');
@@ -151,6 +162,61 @@ class _TerminalWidgetState extends State<TerminalWidget> {
       } catch (e) {
         setState(() {
           _outputLogs.add('Error reading string file: $e');
+        });
+      } finally {
+        setState(() => _isExecuting = false);
+        _scrollToBottom();
+      }
+      return;
+    }
+
+    // Handle ldlxtoken command initialization for Cloudflare tunnel token management
+    if (rawInput == 'ldlxtoken' || rawInput.startsWith('ldlxtoken ')) {
+      setState(() => _isExecuting = true);
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        _targetNetworkFilePath = p.join(appDir.path, 'ldlx_dbs', 'token.env');
+
+        final file = File(_targetNetworkFilePath);
+        if (await file.exists()) {
+          final content = await file.readAsString();
+          _editableConfigLines = content.split('\n');
+        } else {
+          await file.parent.create(recursive: true);
+          _editableConfigLines = [
+            '# Cloudflare Tunnel Token Configuration',
+            '# CLOUDFLARED_TOKEN=your_token_here',
+          ];
+        }
+
+        final parts = rawInput.split(' ');
+        if (parts.length > 1) {
+          final newToken = parts.sublist(1).join(' ').trim();
+          if (newToken.isNotEmpty) {
+            for (int i = 0; i < _editableConfigLines.length; i++) {
+              if (_editableConfigLines[i].trim().startsWith('CLOUDFLARED_TOKEN=')) {
+                _editableConfigLines[i] = '# ${_editableConfigLines[i]}';
+              }
+            }
+            _editableConfigLines.add('CLOUDFLARED_TOKEN=$newToken');
+            await file.writeAsString(_editableConfigLines.join('\n'));
+            setState(() {
+              _outputLogs.add('SUCCESS: Cloudflare token updated and saved to $_targetNetworkFilePath');
+            });
+            setState(() => _isExecuting = false);
+            _scrollToBottom();
+            return;
+          }
+        }
+
+        setState(() {
+          _outputLogs.add('=== OPENED TOKEN EDITOR: $_targetNetworkFilePath ===');
+          _outputLogs.add('Sidebar active. Appending a new CLOUDFLARED_TOKEN line will automatically comment out older ones.');
+          _isEditingNetworkFile = true;
+        });
+      } catch (e) {
+        setState(() {
+          _outputLogs.add('Error opening token file: $e');
         });
       } finally {
         setState(() => _isExecuting = false);
@@ -261,14 +327,15 @@ class _TerminalWidgetState extends State<TerminalWidget> {
 
     try {
       final file = File(_targetNetworkFilePath);
+      await file.parent.create(recursive: true);
       await file.writeAsString(_editableConfigLines.join('\n'));
       setState(() {
-        _outputLogs.add('SUCCESS: Network configuration file saved successfully.');
+        _outputLogs.add('SUCCESS: Configuration file saved successfully.');
         _isEditingNetworkFile = false;
       });
     } catch (e) {
       setState(() {
-        _outputLogs.add('ERROR: Failed to save network config file: $e');
+        _outputLogs.add('ERROR: Failed to save config file: $e');
       });
     }
     _commandController.clear();
@@ -279,7 +346,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
     setState(() {
       _isEditingNetworkFile = false;
       _outputLogs.add('\$ cancel');
-      _outputLogs.add('Network configuration edit cancelled.');
+      _outputLogs.add('Configuration edit cancelled.');
       _commandController.clear();
     });
     _scrollToBottom();
@@ -419,7 +486,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                             decoration: InputDecoration(
                               hintText: _isEditingNetworkFile
                                   ? 'Type line to append to config (or click Save/Cancel)...'
-                                  : 'Enter command (e.g. ldlxstrings, ldlxeditnet, ping, ip addr ...)',
+                                  : 'Enter command (e.g. ldlxtoken, ldlxstrings, ping ...)',
                               hintStyle: TextStyle(color: silverBorder.withOpacity(0.6), fontSize: 11.5),
                               border: InputBorder.none,
                               isDense: true,
@@ -438,7 +505,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
               ),
             ),
 
-            // Sidebar: Pushed Strings Viewer (ldlxstrings) or Network Editor (ldlxeditnet)
+            // Sidebar: Pushed Strings Viewer or Config Line Manager
             if (showSidebar) ...[
               Container(
                 width: 320,
@@ -454,7 +521,6 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                     ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Strings Viewer Sidebar Header
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -492,7 +558,6 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                               ],
                             ),
                           ),
-                          // Strings Line List with Copy Support
                           Expanded(
                             child: ListView.builder(
                               padding: const EdgeInsets.all(8),
@@ -551,7 +616,6 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Network Editor Sidebar Header
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -610,7 +674,6 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                               ],
                             ),
                           ),
-                          // Config Lines List
                           Expanded(
                             child: ListView.builder(
                               padding: const EdgeInsets.all(8),
@@ -676,7 +739,6 @@ class _TerminalWidgetState extends State<TerminalWidget> {
   }
 }
 
-/// Helper function to open the terminal dialog from the sidebar with guaranteed large dimensions
 void showLdlxTerminalDialog(BuildContext context) {
   showDialog(
     context: context,

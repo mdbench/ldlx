@@ -298,7 +298,7 @@ echo "[*] Installing cloudflared binary and systemd service..."
 curl -L --output /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
 chmod +x /usr/local/bin/cloudflared
 
-mkdir -p /etc/cloudflared
+# Configure systemd service targeting the user-writable token location
 cat << 'CF_SERVICE_EOF' > /etc/systemd/system/cloudflared.service
 [Unit]
 Description=Cloudflare Tunnel Service
@@ -310,8 +310,8 @@ TimeoutStartSec=0
 Type=simple
 User=root
 WorkingDirectory=/root
-ExecStartPre=/bin/sh -c 'if [ ! -f /etc/cloudflared/token.env ]; then echo "Cloudflared token not found. Please create /etc/cloudflared/token.env with CLOUDFLARED_TOKEN=your_token"; exit 0; fi'
-ExecStart=/bin/sh -c '. /etc/cloudflared/token.env && exec /usr/local/bin/cloudflared tunnel run --token $CLOUDFLARED_TOKEN'
+ExecStartPre=/bin/sh -c 'if [ ! -f /home/kiosk/Documents/ldlx_dbs/token.env ]; then echo "Cloudflared token not found at /home/kiosk/Documents/ldlx_dbs/token.env"; exit 1; fi'
+ExecStart=/bin/sh -c '. /home/kiosk/Documents/ldlx_dbs/token.env && exec /usr/local/bin/cloudflared tunnel run --token $CLOUDFLARED_TOKEN'
 Restart=on-failure
 RestartSec=10s
 

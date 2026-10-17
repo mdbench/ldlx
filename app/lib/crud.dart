@@ -70,6 +70,10 @@ class _DatabaseCrudViewState extends State<DatabaseCrudView> {
   final List<String> _skippedDatabases = [
     'approve.db',
     'database_logs.db',
+    'comments.db',
+    'pushed_strings.txt',
+    'token.env',
+    'failed_login_attempts.log',
   ];
 
   Database? _approveDb;
@@ -115,7 +119,18 @@ class _DatabaseCrudViewState extends State<DatabaseCrudView> {
     for (var entity in entities) {
       if (entity is File) {
         final filename = p.basename(entity.path);
-        if (_skippedDatabases.contains(filename)) continue; // Skip configured system dbs
+        
+        // Skip configured system dbs, text files, lock files, and environment files
+        if (_skippedDatabases.contains(filename.toLowerCase()) ||
+            filename.endsWith('.lock') ||
+            filename.endsWith('.tmp') ||
+            filename.endsWith('.pem') ||
+            filename.endsWith('.jwt') ||
+            filename.endsWith('.log') ||
+            filename.endsWith('.txt') ||
+            filename.endsWith('.env')) {
+          continue;
+        }
 
         final stat = await entity.stat();
         final ext = p.extension(filename).toLowerCase();

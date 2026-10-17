@@ -178,6 +178,38 @@ cd "${WORKSPACE}/os"
 
 mkdir -p config/package-lists
 mkdir -p config/hooks/normal
+mkdir -p config/binary_debian-installer
+
+# Create automated Preseed configuration to bypass all manual installer prompts
+cat << 'PRESEED_EOF' > config/binary_debian-installer/preseed.cfg
+#_preseed_V1
+d-i debian-installer/locale string en_US.UTF-8
+d-i keyboard-configuration/xkb-keymap select us
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string ldlx-kiosk
+d-i netcfg/get_domain string local
+d-i mirror/country string manual
+d-i mirror/http/hostname string deb.debian.org
+d-i mirror/http/directory string /debian
+d-i mirror/http/proxy string
+d-i passwd/root-login boolean false
+d-i passwd/user-fullname string Kiosk User
+d-i passwd/username string kiosk
+d-i passwd/user-password password kiosk
+d-i passwd/user-password-again password kiosk
+d-i clock-setup/utc boolean true
+d-i time/zone string UTC
+d-i partman-auto/method string regular
+d-i partman-auto/choose_recipe select atomic
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+tasksel tasksel/first multiselect 
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/bootdev string default
+d-i finish-install/reboot_in_progress note
+PRESEED_EOF
 
 # Added required terminal utilities (net-tools, dnsutils, iputils-ping, procps, iproute2, curl, file)
 cat << 'EOF' > config/package-lists/kiosk.list.chroot
@@ -188,6 +220,7 @@ xinit
 openbox
 xterm
 xdg-user-dirs
+wireguard
 wireguard-tools
 iproute2
 net-tools
@@ -219,6 +252,27 @@ id -u kiosk &>/dev/null || useradd -m -d /home/kiosk -s /bin/bash -g kiosk -G su
 echo "kiosk:kiosk" | chpasswd
 
 chown -R kiosk:kiosk /opt/ldlx
+mkdir -p /opt/ldlx.old
+chown -R kiosk:kiosk /opt/ldlx.old
+
+# Create an immutable, pristine factory golden copy from the official repo asset
+mkdir -p /usr/share/ldlx/factory
+TEMP_FACTORY_ZIP=$(mktemp)
+
+echo "[*] Downloading factory default binary from GitHub..."
+if curl -sL "https://raw.githubusercontent.com/mdbench/ldlx/main/binaries/latest.zip" -o "$TEMP_FACTORY_ZIP" && [ -s "$TEMP_FACTORY_ZIP" ]; then
+    unzip -q "$TEMP_FACTORY_ZIP" -d /usr/share/ldlx/factory
+    if [ -f "/usr/share/ldlx/factory/ldlx" ]; then
+        chmod +x /usr/share/ldlx/factory/ldlx
+        echo "[*] Successfully populated immutable factory folder with working binary."
+    else
+        echo "[!] Error: Extracted factory bundle is missing the ldlx binary."
+    fi
+else
+    echo "[!] Error: Failed to download factory default asset from GitHub."
+fi
+rm -f "$TEMP_FACTORY_ZIP"
+
 mkdir -p /home/kiosk/Documents/ldlx_dbs /home/kiosk/.local/share /home/kiosk/.config /home/kiosk/.cache
 chown -R kiosk:kiosk /home/kiosk
 
@@ -241,6 +295,9 @@ cat << 'UPDATE_SCRIPT' > /usr/local/bin/ldlx-update
 #!/bin/bash
 REPO="mdbench/ldlx"
 API_URL="https://api.github.com/repos/$REPO/releases/latest"
+PUBSPEC_URL="https://raw.githubusercontent.com/$REPO/refs/heads/main/app/pubspec.yaml"
+BACKUP_ROOT="/opt/ldlx.old"
+ACTIVE_DIR="/opt/ldlx"
 
 echo "[*] Checking GitHub Releases for latest binary package..."
 TEMP_ZIP=$(mktemp)
@@ -254,13 +311,51 @@ if [ -n "$DOWNLOAD_URL" ] && curl -sL "$DOWNLOAD_URL" -o "$TEMP_ZIP" && [ -s "$T
         if read -t 15 -p "[?] Apply update? (y/N) [Timeout in 15s -> Skipping]: " -n 1 -r; then
             echo ""
             if [[ $REPLY =~ ^[Yy]$ ]]; then
+                echo "[*] Fetching active pubspec.yaml from repository..."
+                PUBSPEC_CONTENT=$(curl -s "$PUBSPEC_URL")
+                
+                if [ -z "$PUBSPEC_CONTENT" ]; then
+                    echo "[!] Error: Failed to fetch pubspec.yaml from GitHub. Aborting update for safety."
+                    rm -f "$TEMP_ZIP"
+                    exit 1
+                fi
+
+                RAW_VERSION=$(echo "$PUBSPEC_CONTENT" | grep '^version:' | head -n 1 | awk '{print $2}' | tr -d '"' | tr -d "'")
+                if [ -z "$RAW_VERSION" ]; then
+                    echo "[!] Error: Could not parse version string from pubspec.yaml. Aborting update."
+                    rm -f "$TEMP_ZIP"
+                    exit 1
+                fi
+
+                if [[ "$RAW_VERSION" == *"+"* ]]; then
+                    VERSION_NAME=$(echo "$RAW_VERSION" | cut -d'+' -f1)
+                    BUILD_NUM=$(echo "$RAW_VERSION" | cut -d'+' -f2)
+                    CURRENT_TAG="v${VERSION_NAME}-build${BUILD_NUM}"
+                else
+                    echo "[!] Error: Version format in pubspec.yaml does not contain expected build metadata (+). Aborting update."
+                    rm -f "$TEMP_ZIP"
+                    exit 1
+                fi
+
+                if [ -d "$BACKUP_ROOT/$CURRENT_TAG" ]; then
+                    echo "[!] Error: Backup folder for version $CURRENT_TAG already exists in $BACKUP_ROOT. Aborting update to prevent overwriting."
+                    rm -f "$TEMP_ZIP"
+                    exit 1
+                fi
+
+                echo "[*] Backing up current version ($CURRENT_TAG) to $BACKUP_ROOT/$CURRENT_TAG..."
+                mkdir -p "$BACKUP_ROOT/$CURRENT_TAG"
+                cp -r "$ACTIVE_DIR"/* "$BACKUP_ROOT/$CURRENT_TAG/" 2>/dev/null || true
+                chown -R kiosk:kiosk "$BACKUP_ROOT/$CURRENT_TAG"
+
                 TEMP_DIR=$(mktemp -d)
                 unzip -q "$TEMP_ZIP" -d "$TEMP_DIR"
                 if [ -f "$TEMP_DIR/ldlx" ]; then
                     chmod +x "$TEMP_DIR/ldlx"
-                    cp -r "$TEMP_DIR"/* /opt/ldlx/
-                    chown -R kiosk:kiosk /opt/ldlx
-                    chmod +x /opt/ldlx/ldlx
+                    rm -rf "$ACTIVE_DIR"/*
+                    cp -r "$TEMP_DIR"/* "$ACTIVE_DIR/"
+                    chown -R kiosk:kiosk "$ACTIVE_DIR"
+                    chmod +x "$ACTIVE_DIR/ldlx"
                     echo "[*] Successfully updated LDLx binary bundle from GitHub!"
                 else
                     echo "[!] Extracted package missing executable ldlx binary."
@@ -314,7 +409,48 @@ xset s noblank
 
 xterm -fg white -bg black -fa 'Monospace' -fs 12 -geometry 90x24 -e /usr/local/bin/ldlx-update
 
-exec /opt/ldlx/ldlx
+# Kiosk Execution & Automatic Crash Fallback Loop with Immutable Factory Recovery
+while true; do
+    if [ -f "/opt/ldlx/ldlx" ]; then
+        cd /opt/ldlx
+        ./ldlx && break
+        echo "[!] App crashed or exited with error. Initiating fallback recovery..."
+    fi
+
+    RECOVERED=0
+    if [ -d "/opt/ldlx.old" ]; then
+        for DIR in $(ls -dt /opt/ldlx.old/*/ 2>/dev/null); do
+            if [ -f "${DIR}ldlx" ]; then
+                echo "[*] Restoring fallback version from ${DIR}..."
+                rm -rf /opt/ldlx/*
+                cp -r "${DIR}"* /opt/ldlx/
+                chown -R kiosk:kiosk /opt/ldlx
+                chmod +x /opt/ldlx/ldlx
+                RECOVERED=1
+                break
+            fi
+        done
+    fi
+
+    if [ $RECOVERED -eq 0 ]; then
+        echo "[!] Critical Error: No working binary found in /opt/ldlx or /opt/ldlx.old!"
+        
+        # Ultimate offline fallback: Pull from immutable read-only system factory backup
+        if [ -d "/usr/share/ldlx/factory" ] && [ -f "/usr/share/ldlx/factory/ldlx" ]; then
+            echo "[*] Restoring pristine factory default version from read-only system storage..."
+            mkdir -p /opt/ldlx
+            rm -rf /opt/ldlx/*
+            cp -r /usr/share/ldlx/factory/* /opt/ldlx/
+            chown -R kiosk:kiosk /opt/ldlx
+            chmod +x /opt/ldlx/ldlx
+            echo "[*] Factory reset complete. Restarting app loop..."
+            continue
+        fi
+
+        echo "[!] Fatal: No factory fallback available. Sleeping..."
+        sleep 5
+    fi
+done
 AUTO_EOF
 
 cat << 'XINIT_EOF' > /home/kiosk/.xinitrc
@@ -349,9 +485,10 @@ lb config \
   --security true \
   --apt-recommends false \
   --linux-packages "linux-image" \
-  --debian-installer true \
+  --debian-installer live \
   --debian-installer-distribution bookworm \
   --bootappend-live "boot=live components union=overlay persistence quiet splash locales=en_US.UTF-8" \
+  --bootappend-install "auto=true priority=critical file=/cdrom/preseed.cfg" \
   --binary-images iso-hybrid
 
 find config/ -type f -exec sed -i 's/Debian GNU\/Linux 12 (bookworm)/LDLx Security Kiosk/g' {} + || true
@@ -432,7 +569,6 @@ if [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_REPOSITORY" ]; then
                     -H "Accept: application/vnd.github+json" \
                     "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${EXISTING_ASSET_ID}" > /dev/null
                 
-                # Pause to let GitHub's backend purge the file and avoid HTTP 500 race conditions
                 echo "[*] Waiting for storage backend purge..."
                 sleep 5
             fi

@@ -8,6 +8,7 @@ import 'db_server_manager.dart';
 import 'aplogs.dart';
 import 'firewall.dart';
 import 'db_service.dart';
+import 'versions.dart';
 
 class DashboardView extends StatefulWidget {
   final UserAccount currentUser;
@@ -482,6 +483,23 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (context) => const ApiLogsView()),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(right: 16.0),
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.cyan.shade800,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.receipt_long, size: 18),
+                label: const Text('Versions'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const VersionsView()),
                   );
                 },
               ),

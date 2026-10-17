@@ -229,6 +229,7 @@ iputils-ping
 procps
 curl
 file
+unzip
 ca-certificates
 libsecret-1-0
 libjsoncpp25

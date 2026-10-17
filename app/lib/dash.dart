@@ -226,7 +226,7 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
     super.dispose();
   }
 
-  void _confirmAndRegenerateToken(StateSetter setModalState) {
+  void _confirmAndRegenerateToken(StateSetter setModalState, LocalDatabaseServerInfo server, TextEditingController tokenController) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -237,8 +237,8 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
             Text('Regenerate JWT Token?'),
           ],
         ),
-        content: const Text(
-          'Warning: Generating a new authentication token will immediately invalidate and expire all active connections, client apps, and scripts relying on the current token.',
+        content: Text(
+          'Warning: Generating a new authentication token for database "${server.dbName}" will immediately invalidate all active connections and scripts relying on the current token.',
         ),
         actions: [
           TextButton(
@@ -247,15 +247,17 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              _serverManager.regenerateAuthToken();
-              setModalState(() {});
+              final newToken = await _serverManager.regenerateAuthToken(server.dbName);
+              setModalState(() {
+                tokenController.text = newToken;
+              });
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('New JWT Token generated. Prior tokens have expired.')),
+                SnackBar(content: Text('New JWT Token generated for ${server.dbName}.')),
               );
             },
-            child: const Text('Confirm & Expire All'),
+            child: const Text('Confirm & Regenerate'),
           ),
         ],
       ),
@@ -265,196 +267,276 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
   void _openApiQueryTroubleshooter(LocalDatabaseServerInfo server) {
     String selectedMethod = 'GET';
     final payloadController = TextEditingController(text: '{\n  "test_key": "troubleshoot_data"\n}');
-    final tokenController = TextEditingController(text: _serverManager.currentJwtToken);
+    final tokenController = TextEditingController(text: server.jwtToken);
     String apiResponse = 'Click "Execute API Request" to test authenticated network endpoint.';
     bool isQuerying = false;
 
     showDialog(
       context: context,
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            Future<void> executeRequest() async {
-              setModalState(() => isQuerying = true);
-              final client = HttpClient()
-                ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+        return DefaultTabController(
+          length: 2,
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              Future<void> executeRequest() async {
+                setModalState(() => isQuerying = true);
+                final client = HttpClient()
+                  ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
 
-              try {
-                final url = Uri.parse('${server.networkUrl}/api/data');
-                HttpClientRequest req;
+                try {
+                  final url = Uri.parse('${server.networkUrl}/api/data');
+                  HttpClientRequest req;
 
-                switch (selectedMethod) {
-                  case 'POST':
-                    req = await client.postUrl(url);
-                    req.headers.contentType = ContentType.json;
-                    req.write(payloadController.text);
-                    break;
-                  case 'PUT':
-                    req = await client.putUrl(url);
-                    req.headers.contentType = ContentType.json;
-                    req.write(payloadController.text);
-                    break;
-                  case 'DELETE':
-                    req = await client.deleteUrl(url);
-                    break;
-                  case 'GET':
-                  default:
-                    req = await client.getUrl(url);
-                    break;
+                  switch (selectedMethod) {
+                    case 'POST':
+                      req = await client.postUrl(url);
+                      req.headers.contentType = ContentType.json;
+                      req.write(payloadController.text);
+                      break;
+                    case 'PUT':
+                      req = await client.putUrl(url);
+                      req.headers.contentType = ContentType.json;
+                      req.write(payloadController.text);
+                      break;
+                    case 'DELETE':
+                      req = await client.deleteUrl(url);
+                      break;
+                    case 'GET':
+                    default:
+                      req = await client.getUrl(url);
+                      break;
+                  }
+
+                  req.headers.add('Authorization', 'Bearer ${tokenController.text.trim()}');
+                  req.headers.add('X-LDLx-Internal', 'true');
+                  req.headers.add('X-Database-Name', server.dbName);
+
+                  final resp = await req.close();
+                  final respBody = await resp.transform(utf8.decoder).join();
+
+                  setModalState(() {
+                    apiResponse = 'HTTP ${resp.statusCode}\n$respBody';
+                    isQuerying = false;
+                  });
+                } catch (e) {
+                  setModalState(() {
+                    apiResponse = 'Request Error: $e';
+                    isQuerying = false;
+                  });
+                } finally {
+                  client.close();
                 }
-
-                req.headers.add('Authorization', 'Bearer ${tokenController.text.trim()}');
-                req.headers.add('X-LDLx-Internal', 'true');
-                req.headers.add('X-Database-Name', server.dbName);
-
-                final resp = await req.close();
-                final respBody = await resp.transform(utf8.decoder).join();
-
-                setModalState(() {
-                  apiResponse = 'HTTP ${resp.statusCode}\n$respBody';
-                  isQuerying = false;
-                });
-              } catch (e) {
-                setModalState(() {
-                  apiResponse = 'Request Error: $e';
-                  isQuerying = false;
-                });
-              } finally {
-                client.close();
               }
-            }
 
-            return AlertDialog(
-              title: Row(
-                children: [
-                  const Icon(Icons.developer_mode, color: Colors.cyanAccent),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('API Troubleshooter: ${server.dbName}')),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.cyan.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(8),
+              return AlertDialog(
+                title: Row(
+                  children: [
+                    const Icon(Icons.developer_mode, color: Colors.cyanAccent),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text('API Troubleshooter: ${server.dbName}')),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.cyan.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text('JWT Secured', style: TextStyle(fontSize: 11, color: Colors.cyanAccent)),
                     ),
-                    child: const Text('JWT Secured', style: TextStyle(fontSize: 11, color: Colors.cyanAccent)),
-                  ),
-                ],
-              ),
-              content: SizedBox(
-                width: 650,
-                child: SingleChildScrollView(
+                  ],
+                ),
+                content: SizedBox(
+                  width: 700,
+                  height: 520,
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Domain Endpoint: ${server.domainUrl}/api/data', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      Text('Network Address: ${server.networkUrl}/api/data', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      const TabBar(
+                        labelColor: Colors.cyanAccent,
+                        unselectedLabelColor: Colors.grey,
+                        indicatorColor: Colors.cyanAccent,
+                        tabs: [
+                          Tab(text: 'Interactive Troubleshooter'),
+                          Tab(text: 'cURL Instructions (Self-Signed TLS)'),
+                        ],
+                      ),
                       const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade900,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.cyan.withOpacity(0.3)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      Expanded(
+                        child: TabBarView(
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const Text('Active JWT Bearer Token:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.cyanAccent)),
-                                Row(
-                                  children: [
-                                    TextButton.icon(
-                                      icon: const Icon(Icons.copy, size: 14),
-                                      label: const Text('Copy', style: TextStyle(fontSize: 11)),
-                                      onPressed: () {
-                                        Clipboard.setData(ClipboardData(text: tokenController.text));
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('JWT Token copied to clipboard!')),
-                                        );
-                                      },
+                            // Tab 1: Interactive Troubleshooter
+                            SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Domain Endpoint: ${server.domainUrl}/api/data', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text('Network Address: ${server.networkUrl}/api/data', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade900,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.cyan.withOpacity(0.3)),
                                     ),
-                                    const SizedBox(width: 4),
-                                    ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900, padding: const EdgeInsets.symmetric(horizontal: 8)),
-                                      icon: const Icon(Icons.refresh, size: 14),
-                                      label: const Text('Regenerate', style: TextStyle(fontSize: 11)),
-                                      onPressed: () => _confirmAndRegenerateToken(setModalState),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Text('Database JWT Bearer Token:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.cyanAccent)),
+                                            Row(
+                                              children: [
+                                                TextButton.icon(
+                                                  icon: const Icon(Icons.copy, size: 14),
+                                                  label: const Text('Copy', style: TextStyle(fontSize: 11)),
+                                                  onPressed: () {
+                                                    Clipboard.setData(ClipboardData(text: tokenController.text));
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      const SnackBar(content: Text('JWT Token copied to clipboard!')),
+                                                    );
+                                                  },
+                                                ),
+                                                const SizedBox(width: 4),
+                                                ElevatedButton.icon(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade900, padding: const EdgeInsets.symmetric(horizontal: 8)),
+                                                  icon: const Icon(Icons.refresh, size: 14),
+                                                  label: const Text('Regenerate', style: TextStyle(fontSize: 11)),
+                                                  onPressed: () => _confirmAndRegenerateToken(setModalState, server, tokenController),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        TextField(
+                                          controller: tokenController,
+                                          style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.greenAccent),
+                                          maxLines: 2,
+                                          decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      DropdownButton<String>(
+                                        value: selectedMethod,
+                                        items: ['GET', 'POST', 'PUT', 'DELETE']
+                                            .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                                            .toList(),
+                                        onChanged: (val) {
+                                          if (val != null) setModalState(() => selectedMethod = val);
+                                        },
+                                      ),
+                                      const SizedBox(width: 12),
+                                      ElevatedButton.icon(
+                                        icon: isQuerying
+                                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                                            : const Icon(Icons.send),
+                                        label: const Text('Execute API Request'),
+                                        onPressed: isQuerying ? null : executeRequest,
+                                      ),
+                                    ],
+                                  ),
+                                  if (selectedMethod == 'POST' || selectedMethod == 'PUT') ...[
+                                    const SizedBox(height: 12),
+                                    TextField(
+                                      controller: payloadController,
+                                      maxLines: 3,
+                                      decoration: const InputDecoration(labelText: 'JSON Request Body Payload', border: OutlineInputBorder()),
                                     ),
                                   ],
-                                ),
-                              ],
+                                  const SizedBox(height: 16),
+                                  const Text('API Response:', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    width: double.infinity,
+                                    height: 140,
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.grey.shade800),
+                                    ),
+                                    child: SingleChildScrollView(
+                                      child: Text(
+                                        apiResponse,
+                                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.greenAccent),
+                                      ),
+                                    ),
+                                  )
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 4),
-                            TextField(
-                              controller: tokenController,
-                              style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.greenAccent),
-                              maxLines: 2,
-                              decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+
+                            // Tab 2: cURL Instructions (Self-Signed TLS)
+                            SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Self-Signed Certificate Notice:',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orangeAccent),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Because this server uses a self-signed SSL certificate, `curl` requires the `-k` (or `--insecure`) flag to bypass SSL verification errors.',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text('Example cURL Request via Local Network:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.cyan.withOpacity(0.3)),
+                                    ),
+                                    child: SelectableText(
+                                      '''curl -k -X GET "${server.networkUrl}/api/data" \\
+  -H "X-Database-Name: ${server.dbName}" \\
+  -H "Authorization: Bearer ${tokenController.text}"''',
+                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.greenAccent),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  const Text('Example POST Request:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: Colors.cyan.withOpacity(0.3)),
+                                    ),
+                                    child: SelectableText(
+                                      '''curl -k -X POST "${server.networkUrl}/api/data" \\
+  -H "X-Database-Name: ${server.dbName}" \\
+  -H "Authorization: Bearer ${tokenController.text}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"key": "value"}' ''',
+                                      style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: Colors.greenAccent),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          DropdownButton<String>(
-                            value: selectedMethod,
-                            items: ['GET', 'POST', 'PUT', 'DELETE']
-                                .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                                .toList(),
-                            onChanged: (val) {
-                              if (val != null) setModalState(() => selectedMethod = val);
-                            },
-                          ),
-                          const SizedBox(width: 12),
-                          ElevatedButton.icon(
-                            icon: isQuerying
-                                ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
-                                : const Icon(Icons.send),
-                            label: const Text('Execute API Request'),
-                            onPressed: isQuerying ? null : executeRequest,
-                          ),
-                        ],
-                      ),
-                      if (selectedMethod == 'POST' || selectedMethod == 'PUT') ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                          controller: payloadController,
-                          maxLines: 3,
-                          decoration: const InputDecoration(labelText: 'JSON Request Body Payload', border: OutlineInputBorder()),
-                        ),
-                      ],
-                      const SizedBox(height: 16),
-                      const Text('API Response:', style: TextStyle(fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: double.infinity,
-                        height: 160,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade800),
-                        ),
-                        child: SingleChildScrollView(
-                          child: Text(
-                            apiResponse,
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12, color: Colors.greenAccent),
-                          ),
-                        ),
-                      )
                     ],
                   ),
                 ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))
-              ],
-            );
-          },
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))
+                ],
+              );
+            },
+          ),
         );
       },
     );
@@ -600,7 +682,7 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
               ValueListenableBuilder<int>(
                 valueListenable: _serverManager.totalActiveConnectionsNotifier,
                 builder: (context, activeConns, _) {
-                  return _buildMetricCard(context, 'Active Connections', '$activeConns Live Sessions', 'Across ${servers.length} Database Servers', Icons.hub_outlined, Colors.lightGreenAccent);
+                  return _buildMetricCard(context, 'Active Connections', '$activeConns Live Sessions', 'Across${servers.length} Database Servers', Icons.hub_outlined, Colors.lightGreenAccent);
                 },
               ),
             ],
@@ -674,8 +756,10 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                                   ),
                                   const Spacer(),
                                   Text(server.domainUrl, style: const TextStyle(fontSize: 12, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 2),
+                                  Text(server.networkUrl, style: const TextStyle(fontSize: 12, color: Colors.cyanAccent, fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 4),
-                                  Text('Active Sessions: ${server.activeSessions} | Total Queries: ${server.totalQueries}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  Text('Active Sessions: ${server.activeSessions} \vert{} Total Queries:${server.totalQueries}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                 ],
                               ),
                             ),
@@ -718,7 +802,7 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                         const SizedBox(height: 8),
                         if (_hoveredRealTimeIndex != null)
                           Text(
-                            'Memory: ${_memoryUsage[_hoveredRealTimeIndex!].toStringAsFixed(1)}% | Storage: ${_storageUsage[_hoveredRealTimeIndex!].toStringAsFixed(1)}%',
+                            'Memory: ${_memoryUsage[_hoveredRealTimeIndex!].toStringAsFixed(1)}\% \vert{} Storage:${_storageUsage[_hoveredRealTimeIndex!].toStringAsFixed(1)}%',
                             style: const TextStyle(fontSize: 11, color: Colors.cyanAccent, fontWeight: FontWeight.bold),
                           )
                         else
@@ -786,7 +870,7 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                                             final count = (_hoveredLogsIndex! < entry.value.length) ? entry.value[_hoveredLogsIndex!] : 0;
                                             final color = _dbColors[entry.key] ?? Colors.cyanAccent;
                                             return Text(
-                                              '${entry.key}: $count reqs',
+                                              '${entry.key}:$count reqs',
                                               style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w600),
                                             );
                                           }).toList(),
@@ -996,7 +1080,7 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                                     return Padding(
                                       padding: const EdgeInsets.only(bottom: 3),
                                       child: Text(
-                                        '${lineIndex + 1}: ${lines[lineIndex]}',
+                                        '${lineIndex + 1}:${lines[lineIndex]}',
                                         style: const TextStyle(
                                           fontFamily: 'monospace',
                                           fontSize: 10,
@@ -1138,7 +1222,7 @@ class _DashboardViewState extends State<DashboardView> with TickerProviderStateM
                                 ),
                                 Expanded(
                                   child: Text(
-                                    'Binding: ${portInfo.bindingAddress} | Proc: ${portInfo.processName}',
+                                    'Binding: ${portInfo.bindingAddress} \vert{} Proc:${portInfo.processName}',
                                     style: const TextStyle(fontSize: 11, color: Colors.grey),
                                     textAlign: TextAlign.end,
                                     overflow: TextOverflow.ellipsis,

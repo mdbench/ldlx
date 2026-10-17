@@ -1,5 +1,8 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 class TerminalWidget extends StatefulWidget {
   const TerminalWidget({Key? key}) : super(key: key);
@@ -12,7 +15,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
   final TextEditingController _commandController = TextEditingController();
   final List<String> _outputLogs = [
     'LDLx Secure Terminal v1.3.0 (Linux x86_64)',
-    'Type "help" for available commands or "ldlxeditnet" to view/edit network configs.',
+    'Type "help" for available commands or "ldlxstrings" to view pushed strings.',
     '------------------------------------------------------------',
   ];
   final ScrollController _scrollController = ScrollController();
@@ -23,6 +26,11 @@ class _TerminalWidgetState extends State<TerminalWidget> {
   String _targetNetworkFilePath = '/etc/network/interfaces';
   List<String> _editableConfigLines = [];
 
+  // Active state for line-by-line pushed strings viewer sidebar (Locked to database directory)
+  bool _isViewingStringFile = false;
+  String _targetStringFilePath = '';
+  List<String> _stringFileLines = [];
+
   // Strict whitelist of allowed command prefixes and utilities
   final List<String> _allowedCommandPrefixes = [
     'cloudflared',
@@ -30,6 +38,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
     'sys-info',
     'ldlxconfignet',
     'ldlxeditnet',
+    'ldlxstrings',
     'save',
     'cancel',
     'help',
@@ -48,6 +57,14 @@ class _TerminalWidgetState extends State<TerminalWidget> {
     String rawInput = _commandController.text.trim();
     if (rawInput.isEmpty) return;
 
+    // Requirement: Auto-remove string file viewer mode the moment ANY new command is sent
+    if (_isViewingStringFile) {
+      setState(() {
+        _isViewingStringFile = false;
+        _outputLogs.add('\$ [Exited string file viewer mode]');
+      });
+    }
+
     // If we are actively in the network file editing state, input lines are appended
     if (_isEditingNetworkFile) {
       if (rawInput == 'cancel') {
@@ -57,7 +74,6 @@ class _TerminalWidgetState extends State<TerminalWidget> {
         _saveConfigChanges();
         return;
       } else {
-        // Automatically append the submitted line to the config buffer
         setState(() {
           _outputLogs.add('\$ [Appending line: "$rawInput"]');
           _editableConfigLines.add(rawInput);
@@ -95,6 +111,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
     if (rawInput == 'help') {
       setState(() {
         _outputLogs.add('Available Commands:');
+        _outputLogs.add('  ldlxstrings              - View line-by-line pushed strings file in sidebar with copy support');
         _outputLogs.add('  ldlxeditnet [path]       - Open interactive network file editor & sidebar');
         _outputLogs.add('  ldlxconfignet            - Interactive tool to view and configure network parameters');
         _outputLogs.add('  sys-test                 - Inspect system memory (free) and disk storage (df)');
@@ -108,6 +125,37 @@ class _TerminalWidgetState extends State<TerminalWidget> {
         _outputLogs.add('  clear                    - Clear terminal console logs');
       });
       _scrollToBottom();
+      return;
+    }
+
+    // Handle ldlxstrings initialization (Locked to application documents database directory)
+    if (rawInput == 'ldlxstrings') {
+      setState(() => _isExecuting = true);
+      try {
+        final appDir = await getApplicationDocumentsDirectory();
+        _targetStringFilePath = p.join(appDir.path, 'ldlx_dbs', 'pushed_strings.txt');
+
+        final file = File(_targetStringFilePath);
+        if (await file.exists()) {
+          final content = await file.readAsString();
+          _stringFileLines = content.split('\n').where((l) => l.trim().isNotEmpty).toList();
+        } else {
+          _stringFileLines = ['(File is empty or does not exist yet: $_targetStringFilePath)'];
+        }
+
+        setState(() {
+          _outputLogs.add('=== OPENED STRING VIEWER: $_targetStringFilePath ===');
+          _outputLogs.add('Sidebar active. Click copy next to any line to copy it. Sending any command will auto-close viewer.');
+          _isViewingStringFile = true;
+        });
+      } catch (e) {
+        setState(() {
+          _outputLogs.add('Error reading string file: $e');
+        });
+      } finally {
+        setState(() => _isExecuting = false);
+        _scrollToBottom();
+      }
       return;
     }
 
@@ -127,7 +175,6 @@ class _TerminalWidgetState extends State<TerminalWidget> {
           final content = await file.readAsString();
           _editableConfigLines = content.split('\n');
         } else {
-          // Default template if file doesn't exist yet
           _editableConfigLines = [
             '# Network Interface Configuration',
             'auto eth0',
@@ -200,10 +247,8 @@ class _TerminalWidgetState extends State<TerminalWidget> {
     setState(() {
       String line = _editableConfigLines[index];
       if (line.trim().startsWith('#')) {
-        // Uncomment
         _editableConfigLines[index] = line.replaceFirst(RegExp(r'#\s*'), '');
       } else {
-        // Comment out
         _editableConfigLines[index] = '# $line';
       }
     });
@@ -254,12 +299,13 @@ class _TerminalWidgetState extends State<TerminalWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Pale blue, silver, and icy color theme definitions
     const Color icyBackground = Color(0xFF0F172A);
     const Color panelSurface = Color(0xFF1E293B);
     const Color silverBorder = Color(0xFF64748B);
     const Color paleBlueAccent = Color(0xFFE0F7FA);
     const Color iceBlueText = Color(0xFFB2EBF2);
+
+    final bool showSidebar = _isEditingNetworkFile || _isViewingStringFile;
 
     return SizedBox(
       width: 960,
@@ -281,7 +327,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
           children: [
             // Main Terminal Window Section
             Expanded(
-              flex: _isEditingNetworkFile ? 3 : 5,
+              flex: showSidebar ? 3 : 5,
               child: Column(
                 children: [
                   // Terminal Title Bar
@@ -297,9 +343,11 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                         const Icon(Icons.terminal, color: paleBlueAccent, size: 18),
                         const SizedBox(width: 8),
                         Text(
-                          _isEditingNetworkFile
-                              ? 'LDLx Terminal - Editing: $_targetNetworkFilePath'
-                              : 'LDLx Secure Terminal (Cloudflare & Diagnostics)',
+                          _isViewingStringFile
+                              ? 'LDLx Terminal - Pushed Strings: $_targetStringFilePath'
+                              : (_isEditingNetworkFile
+                                  ? 'LDLx Terminal - Editing: $_targetNetworkFilePath'
+                                  : 'LDLx Secure Terminal (Cloudflare & Diagnostics)'),
                           style: const TextStyle(
                             color: paleBlueAccent,
                             fontSize: 13,
@@ -346,7 +394,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                   if (_isExecuting)
                     const LinearProgressIndicator(minHeight: 2, color: paleBlueAccent),
 
-                  // Command / Append Input Bar
+                  // Command Input Bar
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -371,7 +419,7 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                             decoration: InputDecoration(
                               hintText: _isEditingNetworkFile
                                   ? 'Type line to append to config (or click Save/Cancel)...'
-                                  : 'Enter command (e.g. ldlxeditnet, ping, ip addr, dig ...)',
+                                  : 'Enter command (e.g. ldlxstrings, ldlxeditnet, ping, ip addr ...)',
                               hintStyle: TextStyle(color: silverBorder.withOpacity(0.6), fontSize: 11.5),
                               border: InputBorder.none,
                               isDense: true,
@@ -390,8 +438,8 @@ class _TerminalWidgetState extends State<TerminalWidget> {
               ),
             ),
 
-            // Network Config Editor Sidebar (Visible only when editing mode is active)
-            if (_isEditingNetworkFile) ...[
+            // Sidebar: Pushed Strings Viewer (ldlxstrings) or Network Editor (ldlxeditnet)
+            if (showSidebar) ...[
               Container(
                 width: 320,
                 decoration: BoxDecoration(
@@ -402,126 +450,223 @@ class _TerminalWidgetState extends State<TerminalWidget> {
                   ),
                   border: Border(left: BorderSide(color: silverBorder.withOpacity(0.5))),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Sidebar Header with Save / Cancel Buttons
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: panelSurface,
-                        borderRadius: const BorderRadius.only(topRight: Radius.circular(16)),
-                        border: Border(bottom: BorderSide(color: silverBorder.withOpacity(0.4))),
-                      ),
-                      child: Column(
+                child: _isViewingStringFile
+                    ? Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Config Line Manager',
-                            style: TextStyle(
-                              color: paleBlueAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Toggle comments or type below to append.',
-                            style: TextStyle(color: silverBorder, fontSize: 10.5),
-                          ),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.cyan.shade700,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
-                                  icon: const Icon(Icons.save, size: 14),
-                                  label: const Text('SAVE'),
-                                  onPressed: _saveConfigChanges,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: silverBorder,
-                                    side: const BorderSide(color: silverBorder),
-                                    padding: const EdgeInsets.symmetric(vertical: 8),
-                                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
-                                  icon: const Icon(Icons.close, size: 14),
-                                  label: const Text('CANCEL'),
-                                  onPressed: _cancelEditing,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Config Lines List
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(8),
-                        itemCount: _editableConfigLines.length,
-                        itemBuilder: (context, index) {
-                          final line = _editableConfigLines[index];
-                          final isCommented = line.trim().startsWith('#');
-                          return Container(
-                            margin: const EdgeInsets.symmetric(vertical: 3),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          // Strings Viewer Sidebar Header
+                          Container(
+                            padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: isCommented ? Colors.black26 : const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: silverBorder.withOpacity(0.3)),
+                              color: panelSurface,
+                              borderRadius: const BorderRadius.only(topRight: Radius.circular(16)),
+                              border: Border(bottom: BorderSide(color: silverBorder.withOpacity(0.4))),
                             ),
                             child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  '${index + 1}:',
-                                  style: TextStyle(color: silverBorder, fontSize: 10, fontFamily: 'monospace'),
+                                const Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Pushed Strings Viewer',
+                                      style: TextStyle(
+                                        color: paleBlueAccent,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Click copy icon next to any line.',
+                                      style: TextStyle(color: silverBorder, fontSize: 10),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    line,
-                                    style: TextStyle(
-                                      color: isCommented ? silverBorder : iceBlueText,
-                                      fontSize: 11,
-                                      fontFamily: 'monospace',
-                                      decoration: isCommented ? TextDecoration.lineThrough : null,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                InkWell(
-                                  onTap: () => _toggleCommentLine(index),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: isCommented ? Colors.green.shade900 : Colors.orange.shade900,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      isCommented ? 'Uncomment' : '#',
-                                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 16, color: silverBorder),
+                                  onPressed: () => setState(() => _isViewingStringFile = false),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
                                 ),
                               ],
                             ),
-                          );
-                        },
+                          ),
+                          // Strings Line List with Copy Support
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(8),
+                              itemCount: _stringFileLines.length,
+                              itemBuilder: (context, index) {
+                                final line = _stringFileLines[index];
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 3),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1E293B),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: silverBorder.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '${index + 1}:',
+                                        style: TextStyle(color: silverBorder, fontSize: 10, fontFamily: 'monospace'),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          line,
+                                          style: const TextStyle(
+                                            color: iceBlueText,
+                                            fontSize: 11,
+                                            fontFamily: 'monospace',
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.copy, size: 14, color: paleBlueAccent),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        tooltip: 'Copy line',
+                                        onPressed: () {
+                                          Clipboard.setData(ClipboardData(text: line));
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Copied line to clipboard!'),
+                                              duration: Duration(milliseconds: 1200),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Network Editor Sidebar Header
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: panelSurface,
+                              borderRadius: const BorderRadius.only(topRight: Radius.circular(16)),
+                              border: Border(bottom: BorderSide(color: silverBorder.withOpacity(0.4))),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Config Line Manager',
+                                  style: TextStyle(
+                                    color: paleBlueAccent,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Toggle comments or type below to append.',
+                                  style: TextStyle(color: silverBorder, fontSize: 10.5),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.cyan.shade700,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                        icon: const Icon(Icons.save, size: 14),
+                                        label: const Text('SAVE'),
+                                        onPressed: _saveConfigChanges,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: silverBorder,
+                                          side: const BorderSide(color: silverBorder),
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                          textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                                        ),
+                                        icon: const Icon(Icons.close, size: 14),
+                                        label: const Text('CANCEL'),
+                                        onPressed: _cancelEditing,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Config Lines List
+                          Expanded(
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(8),
+                              itemCount: _editableConfigLines.length,
+                              itemBuilder: (context, index) {
+                                final line = _editableConfigLines[index];
+                                final isCommented = line.trim().startsWith('#');
+                                return Container(
+                                  margin: const EdgeInsets.symmetric(vertical: 3),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isCommented ? Colors.black26 : const Color(0xFF1E293B),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: silverBorder.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        '${index + 1}:',
+                                        style: TextStyle(color: silverBorder, fontSize: 10, fontFamily: 'monospace'),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          line,
+                                          style: TextStyle(
+                                            color: isCommented ? silverBorder : iceBlueText,
+                                            fontSize: 11,
+                                            fontFamily: 'monospace',
+                                            decoration: isCommented ? TextDecoration.lineThrough : null,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      InkWell(
+                                        onTap: () => _toggleCommentLine(index),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isCommented ? Colors.green.shade900 : Colors.orange.shade900,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Text(
+                                            isCommented ? 'Uncomment' : '#',
+                                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ],

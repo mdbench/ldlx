@@ -180,7 +180,7 @@ mkdir -p config/package-lists
 mkdir -p config/hooks/normal
 mkdir -p config/binary_debian-installer
 
-# Create automated Preseed configuration to bypass all manual installer prompts
+# Create Preseed configuration with safe confirmation checks before writing to disk
 mkdir -p config/includes.binary
 cat << 'PRESEED_EOF' > config/includes.binary/preseed.cfg
 #_preseed_V1
@@ -204,8 +204,9 @@ d-i partman-auto/method string regular
 d-i partman-auto/choose_recipe select atomic
 d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/choose_partition select finish
-d-i partman/confirm boolean true
-d-i partman/confirm_nooverwrite boolean true
+# Set to false to prompt user for confirmation before wiping hard drive
+d-i partman/confirm boolean false
+d-i partman/confirm_nooverwrite boolean false
 tasksel tasksel/first multiselect 
 d-i grub-installer/only_debian boolean true
 d-i grub-installer/bootdev string default
@@ -253,6 +254,10 @@ getent group kiosk || groupadd kiosk
 id -u kiosk &>/dev/null || useradd -m -d /home/kiosk -s /bin/bash -g kiosk -G sudo,audio,video,netdev,render kiosk
 echo "kiosk:kiosk" | chpasswd
 
+# Inject local domain mapping for lakelady.ldlx
+echo "[*] Adding lakelady.ldlx to /etc/hosts..."
+echo "127.0.0.1 lakelady.ldlx" >> /etc/hosts
+
 chown -R kiosk:kiosk /opt/ldlx
 mkdir -p /opt/ldlx.old
 chown -R kiosk:kiosk /opt/ldlx.old
@@ -288,10 +293,33 @@ ExecStart=-/sbin/agetty --autologin kiosk --noclear %I $TERM
 Type=idle
 GETTY_CONF
 
-# Download cloudflared binary into /usr/local/bin during ISO build hooks so it's natively available
-echo "[*] Installing cloudflared binary..."
+# Download cloudflared binary into /usr/local/bin and configure systemd service
+echo "[*] Installing cloudflared binary and systemd service..."
 curl -L --output /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64
 chmod +x /usr/local/bin/cloudflared
+
+mkdir -p /etc/cloudflared
+cat << 'CF_SERVICE_EOF' > /etc/systemd/system/cloudflared.service
+[Unit]
+Description=Cloudflare Tunnel Service
+After=network.online.target
+Wants=network.online.target
+
+[Service]
+TimeoutStartSec=0
+Type=simple
+User=root
+WorkingDirectory=/root
+ExecStartPre=/bin/sh -c 'if [ ! -f /etc/cloudflared/token.env ]; then echo "Cloudflared token not found. Please create /etc/cloudflared/token.env with CLOUDFLARED_TOKEN=your_token"; exit 0; fi'
+ExecStart=/bin/sh -c '. /etc/cloudflared/token.env && exec /usr/local/bin/cloudflared tunnel run --token $CLOUDFLARED_TOKEN'
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=multi-user.target
+CF_SERVICE_EOF
+
+systemctl enable cloudflared.service
 
 cat << 'UPDATE_SCRIPT' > /usr/local/bin/ldlx-update
 #!/bin/bash
@@ -490,7 +518,7 @@ lb config \
   --debian-installer live \
   --debian-installer-distribution bookworm \
   --bootappend-live "boot=live components union=overlay persistence quiet splash locales=en_US.UTF-8" \
-  --bootappend-install "auto=true priority=critical file=/cdrom/preseed.cfg" \
+  --bootappend-install "priority=high file=/cdrom/preseed.cfg" \
   --binary-images iso-hybrid
 
 find config/ -type f -exec sed -i 's/Debian GNU\/Linux 12 (bookworm)/LDLx Security Kiosk/g' {} + || true

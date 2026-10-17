@@ -68,3 +68,4 @@ flutter:
     - assets/ldlx.jpg
     - assets/cert.pem
     - assets/key.pem
+    - assets/fingerprint2.min.js

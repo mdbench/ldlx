@@ -200,8 +200,6 @@ d-i passwd/user-password password kiosk
 d-i passwd/user-password-again password kiosk
 d-i clock-setup/utc boolean true
 d-i time/zone string UTC
-d-i partman-auto/method string regular
-d-i partman-auto/choose_recipe select atomic
 d-i partman-partitioning/confirm_write_new_label boolean true
 d-i partman/choose_partition select finish
 # Set to false to prompt user for confirmation before wiping hard drive
@@ -239,6 +237,9 @@ alsa-utils
 parted
 dosfstools
 efibootmgr
+mdadm
+lvm2
+cryptsetup
 libgtk-3-0
 libgles2-mesa
 libegl1-mesa

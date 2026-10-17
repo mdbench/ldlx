@@ -547,7 +547,8 @@ class DbServerManager {
         ..useCertificateChainBytes(certData.buffer.asUint8List())
         ..usePrivateKeyBytes(keyData.buffer.asUint8List());
 
-      final bindAddress = InternetAddress(_boundIpAddress);
+      //final bindAddress = InternetAddress(_boundIpAddress);
+      final bindAddress = InternetAddress.anyIPv4;
 
       _masterServer = await HttpServer.bindSecure(
         bindAddress,

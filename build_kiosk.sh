@@ -550,51 +550,35 @@ if [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_REPOSITORY" ]; then
         "$CLONED_TAR|ldlx-container-bundle-${LOCAL_TAG}.tar.gz"
     )
 
+    # Pre-purge stuck assets from the release to ensure a clean overwrite
+    ASSETS_JSON=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets")
+    for ITEM in "${ASSETS_TO_UPLOAD[@]}"; do
+        FILE_NAME="${ITEM##*|}"
+        EXISTING_ASSET_ID=$(echo "$ASSETS_JSON" | jq -r --arg name "$FILE_NAME" '.[] | select(.name == $name) | .id')
+        if [ -n "$EXISTING_ASSET_ID" ] && [ "$EXISTING_ASSET_ID" != "null" ]; then
+            echo "[*] Deleting outdated/stuck asset $FILE_NAME (ID: $EXISTING_ASSET_ID)..."
+            curl -s -X DELETE -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${EXISTING_ASSET_ID}" > /dev/null
+        fi
+    done
+    sleep 2
+
+    # Memory-Safe GitHub Release Asset Replacement via GitHub CLI
     for ITEM in "${ASSETS_TO_UPLOAD[@]}"; do
         FILE_PATH="${ITEM%%|*}"
         FILE_NAME="${ITEM##*|}"
 
         if [ -f "$FILE_PATH" ]; then
-            echo "[*] Processing asset target: $FILE_NAME from $FILE_PATH"
+            echo "[*] Uploading asset: $FILE_NAME via gh cli..."
             
-            ASSETS_JSON=$(curl -s -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets")
+            # Use GitHub CLI to upload, utilizing the --clobber flag to overwrite 
+            # existing assets without failing or consuming unnecessary RAM
+            GH_TOKEN="$GITHUB_TOKEN" gh release upload "${LOCAL_TAG}" "$FILE_PATH#$FILE_NAME" --clobber
             
-            EXISTING_ASSET_ID=$(echo "$ASSETS_JSON" | jq -r --arg name "$FILE_NAME" '.[] | select(.name == $name) | .id')
-            
-            if [ -n "$EXISTING_ASSET_ID" ] && [ "$EXISTING_ASSET_ID" != "null" ]; then
-                echo "[*] Forcing deletion of outdated asset $FILE_NAME (Asset ID: $EXISTING_ASSET_ID)..."
-                curl -s -o /dev/null -w "%{http_code}" -X DELETE \
-                    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                    -H "Accept: application/vnd.github+json" \
-                    "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/assets/${EXISTING_ASSET_ID}" > /dev/null
-                
-                echo "[*] Waiting for storage backend purge..."
-                sleep 5
-            fi
-
-            echo "[*] Uploading fresh asset $FILE_NAME..."
-            UPLOAD_STATUS="000"
-            RETRY_COUNT=0
-            
-            while [ "$UPLOAD_STATUS" != "201" ] && [ $RETRY_COUNT -lt 3 ]; do
-                if [ $RETRY_COUNT -gt 0 ]; then
-                    echo "[*] Retrying upload (Attempt $((RETRY_COUNT + 1)))..."
-                    sleep 5
-                fi
-                
-                UPLOAD_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-                    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-                    -H "Accept: application/vnd.github+json" \
-                    -H "Content-Type: application/octet-stream" \
-                    --data-binary "@$FILE_PATH" \
-                    "https://uploads.github.com/repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}/assets?name=${FILE_NAME}")
-                
-                RETRY_COUNT=$((RETRY_COUNT + 1))
-            done
-            
-            echo "[*] Upload HTTP Status for $FILE_NAME: $UPLOAD_STATUS"
+            echo "[*] Successfully processed $FILE_NAME"
         else
             echo "[!] Warning: Required artifact missing at $FILE_PATH"
         fi

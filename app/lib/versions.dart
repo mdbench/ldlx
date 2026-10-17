@@ -8,14 +8,12 @@ class ReleaseAsset {
   final String name;
   final String downloadUrl;
   bool isDownloadedLocally;
-  bool isCurrentActive;
 
   ReleaseAsset({
     required this.tagName,
     required this.name,
     required this.downloadUrl,
     this.isDownloadedLocally = false,
-    this.isCurrentActive = false,
   });
 }
 
@@ -30,56 +28,40 @@ class VersionManager {
         'User-Agent': 'LDLx-Client',
       };
 
-  static Future<String> getCurrentVersion() async {
-    try {
-      final pubspecFile = File('$activeInstallDir/pubspec.yaml');
-      if (await pubspecFile.exists()) {
-        final lines = await pubspecFile.readAsLines();
-        for (var line in lines) {
-          if (line.startsWith('version:')) {
-            final raw = line.split(':')[1].trim().replaceAll('"', '').replaceAll("'", '');
-            return raw;
-          }
-        }
-      }
-    } catch (_) {}
-    return 'unknown';
-  }
-
   static Future<List<ReleaseAsset>> fetchRemoteReleases() async {
     final url = Uri.parse('https://api.github.com/repos/$repoOwner/$repoName/releases');
-    final currentVer = await getCurrentVersion();
     
     try {
       final response = await http.get(url, headers: _githubHeaders);
 
       if (response.statusCode != 200) {
-        throw Exception('Failed to fetch releases: ${response.statusCode}');
+        print('[!] GitHub API error: ${response.statusCode}');
+        return [];
       }
 
-      final List<dynamic> releasesJson = jsonDecode(response.body);
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> releasesJson = decoded is List ? decoded : [decoded];
       List<ReleaseAsset> assets = [];
 
       for (var release in releasesJson) {
-        final tagName = release['tag_name'] as String;
+        final tagName = release['tag_name'] as String? ?? '';
         final List<dynamic> releaseAssets = release['assets'] ?? [];
 
         for (var asset in releaseAssets) {
-          final assetName = asset['name'] as String;
+          final assetName = asset['name'] as String? ?? '';
           
           if (assetName.startsWith('ldlx-linux-binary-') && assetName.endsWith('.zip')) {
-            final downloadUrl = asset['browser_download_url'] as String;
+            final downloadUrl = asset['browser_download_url'] as String? ?? '';
             
+            // Check existence directly in local backup directory
             final localPath = Directory('$backupRoot/$tagName');
             final exists = await localPath.exists() && await File('$backupRoot/$tagName/ldlx').exists();
-            final isCurrent = tagName == currentVer || tagName == 'v$currentVer' || 'v$tagName' == currentVer;
 
             assets.add(ReleaseAsset(
               tagName: tagName,
               name: assetName,
               downloadUrl: downloadUrl,
               isDownloadedLocally: exists,
-              isCurrentActive: isCurrent,
             ));
           }
         }
@@ -91,9 +73,9 @@ class VersionManager {
     }
   }
 
-  static Future<void> backupCurrentVersion(String currentVersionName) async {
+  static Future<void> backupCurrentVersion(String versionTag) async {
     try {
-      final backupDir = Directory('$backupRoot/$currentVersionName');
+      final backupDir = Directory('$backupRoot/$versionTag');
       if (!await backupDir.exists()) {
         await backupDir.create(recursive: true);
       }
@@ -103,14 +85,14 @@ class VersionManager {
         await for (var entity in activeDir.list(recursive: false)) {
           final name = entity.uri.pathSegments.last;
           if (entity is File) {
-            await entity.copy('$backupRoot/$currentVersionName/$name');
+            await entity.copy('$backupRoot/$versionTag/$name');
           } else if (entity is Directory && name != 'ldlx.old') {
-            await _copyDirectory(entity, Directory('$backupRoot/$currentVersionName/$name'));
+            await _copyDirectory(entity, Directory('$backupRoot/$versionTag/$name'));
           }
         }
       }
     } catch (e) {
-      print('[!] Failed to store current version: $e');
+      print('[!] Failed to store version backup: $e');
     }
   }
 
@@ -140,24 +122,6 @@ class VersionManager {
       }
     } catch (e) {
       print('[!] Error downloading version: $e');
-    }
-    return false;
-  }
-
-  static Future<bool> executeFallbackRecovery() async {
-    final rootDir = Directory(backupRoot);
-    if (!await rootDir.exists()) return false;
-
-    final subDirs = rootDir.listSync().whereType<Directory>().toList();
-    subDirs.sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
-
-    for (var dir in subDirs) {
-      final executablePath = '${dir.path}/ldlx';
-      if (await File(executablePath).exists()) {
-        await _copyDirectory(dir, Directory(activeInstallDir));
-        await Process.run('chmod', ['+x', '$activeInstallDir/ldlx']);
-        return true;
-      }
     }
     return false;
   }
@@ -241,8 +205,9 @@ class _VersionsViewState extends State<VersionsView> {
         );
       }
     } else {
-      final currentVer = await VersionManager.getCurrentVersion();
-      await VersionManager.backupCurrentVersion(currentVer);
+      // Backup current state under a temporary timestamp or generic tag before switching
+      final fallbackTag = 'backup-${DateTime.now().millisecondsSinceEpoch}';
+      await VersionManager.backupCurrentVersion(fallbackTag);
 
       final sourceDir = Directory('${VersionManager.backupRoot}/${release.tagName}');
       await VersionManager._copyDirectory(sourceDir, Directory(VersionManager.activeInstallDir));
@@ -296,7 +261,7 @@ class _VersionsViewState extends State<VersionsView> {
             const SizedBox(height: 10),
             // Versions List Header
             const Text(
-              'Available GitHub Releases',
+              'Available GitHub Releases & Local Cache',
               style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
@@ -331,25 +296,9 @@ class _VersionsViewState extends State<VersionsView> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Text(
-                                        release.tagName,
-                                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                                      ),
-                                      if (release.isCurrentActive) ...[
-                                        const SizedBox(width: 10),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF00C853).withOpacity(0.2),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: const Color(0xFF00C853).withOpacity(0.5)),
-                                          ),
-                                          child: const Text('ACTIVE', style: TextStyle(color: Color(0xFF00C853), fontSize: 10, fontWeight: FontWeight.bold)),
-                                        ),
-                                      ],
-                                    ],
+                                  Text(
+                                    release.tagName,
+                                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                                   ),
                                   const SizedBox(height: 6),
                                   Text(release.name, style: TextStyle(color: Colors.grey[400], fontSize: 13)),

@@ -181,7 +181,8 @@ mkdir -p config/hooks/normal
 mkdir -p config/binary_debian-installer
 
 # Create automated Preseed configuration to bypass all manual installer prompts
-cat << 'PRESEED_EOF' > config/binary_debian-installer/preseed.cfg
+mkdir -p config/includes.binary
+cat << 'PRESEED_EOF' > config/includes.binary/preseed.cfg
 #_preseed_V1
 d-i debian-installer/locale string en_US.UTF-8
 d-i keyboard-configuration/xkb-keymap select us
